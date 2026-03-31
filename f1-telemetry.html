@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1 Telemetry Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --panel: #161616;
+    --border: #2a2a2a;
+    --accent: #e10600;
+    --accent2: #00d2ff;
+    --text: #f0f0f0;
+    --muted: #666;
+    --green: #39ff14;
+    --yellow: #ffd700;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #0a0a0a;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header span {
+    color: var(--muted);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+  }
+
+  .control-group label {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  select, button {
+    width: 100%;
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    border-radius: 2px;
+    cursor: pointer;
+    appearance: none;
+  }
+
+  select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  select:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-load {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    transition: opacity 0.2s;
+    align-self: end;
+  }
+  .btn-load:hover { opacity: 0.85; }
+  .btn-load:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Driver slots */
+  .driver-slots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .driver-slot {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+  }
+
+  .driver-slot h3 {
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .driver-slot .slot-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .driver-color-a { border-top: 3px solid #e10600; }
+  .driver-color-b { border-top: 3px solid #00d2ff; }
+
+  /* Lap table */
+  .lap-table-wrap {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    background: #0a0a0a;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.6rem;
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #1a1a1a;
+    cursor: pointer;
+  }
+
+  tr:hover td { background: #1f1f1f; }
+  tr.selected td { background: #1a0a0a; color: var(--accent); }
+  tr.selected-b td { background: #0a1a1a; color: var(--accent2); }
+
+  /* Charts */
+  .charts { display: grid; gap: 14px; }
+
+  .chart-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+  }
+
+  .chart-card h4 {
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .chart-card canvas { max-height: 160px; }
+
+  /* Status bar */
+  .status {
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    color: var(--muted);
+    padding: 6px 0;
+    min-height: 24px;
+  }
+
+  .status.loading { color: var(--yellow); }
+  .status.error { color: var(--accent); }
+  .status.ok { color: var(--green); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 10px;
+    font-size: 0.72rem;
+    align-items: center;
+  }
+
+  .legend-dot {
+    width: 12px; height: 3px;
+    display: inline-block;
+    margin-right: 6px;
+    border-radius: 2px;
+  }
+
+  /* Fastest lap badge */
+  .fastest { color: var(--green); font-weight: bold; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #1a1a1a; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .info-row {
+    display: flex;
+    gap: 20px;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .info-row span { color: var(--text); }
+
+  @media (max-width: 700px) {
+    .driver-slots { grid-template-columns: 1fr; }
+    .controls { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>F1 Telemetry</h1>
+  <span>powered by OpenF1</span>
+</header>
+
+<div class="container">
+
+  <!-- Session Selection -->
+  <div class="controls">
+    <div class="control-group">
+      <label>Season</label>
+      <select id="yearSelect">
+        <option value="2025">2025</option>
+        <option value="2024">2024</option>
+        <option value="2023">2023</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Grand Prix</label>
+      <select id="meetingSelect" disabled>
+        <option>— select year first —</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Session</label>
+      <select id="sessionSelect" disabled>
+        <option>— select GP first —</option>
+      </select>
+    </div>
+    <div class="control-group" style="display:flex;align-items:flex-end;">
+      <button class="btn-load" id="loadSessionBtn" disabled>Load Session</button>
+    </div>
+  </div>
+
+  <div class="status" id="status">Select a year to get started.</div>
+
+  <!-- Driver + Lap selectors -->
+  <div class="driver-slots" id="driverSlots" style="display:none;">
+    <div class="driver-slot driver-color-a">
+      <h3>Driver A</h3>
+      <div class="slot-row">
+        <div class="control-group">
+          <label>Driver</label>
+          <select id="driverA"><option>—</option></select>
+        </div>
+        <div class="control-group">
+          <label>Lap</label>
+          <select id="lapA" disabled><option>—</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="driver-slot driver-color-b">
+      <h3>Driver B</h3>
+      <div class="slot-row">
+        <div class="control-group">
+          <label>Driver</label>
+          <select id="driverB"><option>—</option></select>
+        </div>
+        <div class="control-group">
+          <label>Lap</label>
+          <select id="lapB" disabled><option>—</option></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:14px;" id="compareBtnWrap" style="display:none;">
+    <button class="btn-load" id="compareBtn" style="width:auto;padding:10px 28px;" disabled>Compare Telemetry</button>
+  </div>
+
+  <!-- Lap time tables -->
+  <div class="driver-slots" id="lapTables" style="display:none;">
+    <div class="driver-slot driver-color-a">
+      <h3>Lap Times — Driver A</h3>
+      <div class="lap-table-wrap"><table id="lapTableA"><thead><tr><th>Lap</th><th>Time</th><th>S1</th><th>S2</th><th>S3</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="driver-slot driver-color-b">
+      <h3>Lap Times — Driver B</h3>
+      <div class="lap-table-wrap"><table id="lapTableB"><thead><tr><th>Lap</th><th>Time</th><th>S1</th><th>S2</th><th>S3</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts" id="charts" style="display:none;">
+    <div class="legend">
+      <div><span class="legend-dot" style="background:#e10600;"></span><span id="legendA">Driver A</span></div>
+      <div><span class="legend-dot" style="background:#00d2ff;"></span><span id="legendB">Driver B</span></div>
+    </div>
+    <div class="chart-card"><h4>Speed (km/h)</h4><canvas id="chartSpeed"></canvas></div>
+    <div class="chart-card"><h4>Throttle (%)</h4><canvas id="chartThrottle"></canvas></div>
+    <div class="chart-card"><h4>Brake</h4><canvas id="chartBrake"></canvas></div>
+    <div class="chart-card"><h4>RPM</h4><canvas id="chartRpm"></canvas></div>
+    <div class="chart-card"><h4>Gear</h4><canvas id="chartGear"></canvas></div>
+  </div>
+
+</div>
+
+<script>
+const API = 'https://api.openf1.org/v1';
+let sessions = [], drivers = [], laps = {}, charts = {};
+let currentSession = null;
+let selectedLapA = null, selectedLapB = null;
+let driverANum = null, driverBNum = null;
+
+// ---- Helpers ----
+function fmtTime(secs) {
+  if (!secs) return '—';
+  const m = Math.floor(secs / 60);
+  const s = (secs % 60).toFixed(3).padStart(6, '0');
+  return m > 0 ? `${m}:${s}` : `${s}s`;
+}
+
+function setStatus(msg, type='') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ---- Year Change ----
+document.getElementById('yearSelect').addEventListener('change', async function() {
+  const year = this.value;
+  const meetSel = document.getElementById('meetingSelect');
+  const sessSel = document.getElementById('sessionSelect');
+  meetSel.disabled = true;
+  sessSel.disabled = true;
+  document.getElementById('loadSessionBtn').disabled = true;
+  meetSel.innerHTML = '<option>Loading...</option>';
+  setStatus('Fetching meetings...', 'loading');
+  try {
+    const meetings = await fetchJSON(`${API}/meetings?year=${year}`);
+    meetings.sort((a,b) => a.meeting_key - b.meeting_key);
+    meetSel.innerHTML = meetings.map(m =>
+      `<option value="${m.meeting_key}">${m.country_name} — ${m.meeting_name}</option>`
+    ).join('');
+    meetSel.disabled = false;
+    setStatus(`${meetings.length} meetings loaded.`, 'ok');
+    meetSel.dispatchEvent(new Event('change'));
+  } catch(e) {
+    setStatus('Failed to load meetings: ' + e.message, 'error');
+  }
+});
+
+// ---- Meeting Change ----
+document.getElementById('meetingSelect').addEventListener('change', async function() {
+  const mk = this.value;
+  const sessSel = document.getElementById('sessionSelect');
+  sessSel.disabled = true;
+  document.getElementById('loadSessionBtn').disabled = true;
+  sessSel.innerHTML = '<option>Loading...</option>';
+  setStatus('Fetching sessions...', 'loading');
+  try {
+    sessions = await fetchJSON(`${API}/sessions?meeting_key=${mk}`);
+    sessions.sort((a,b) => a.session_key - b.session_key);
+    sessSel.innerHTML = sessions.map(s =>
+      `<option value="${s.session_key}">${s.session_name} (${s.session_type})</option>`
+    ).join('');
+    sessSel.disabled = false;
+    document.getElementById('loadSessionBtn').disabled = false;
+    setStatus('Ready. Click "Load Session".', 'ok');
+  } catch(e) {
+    setStatus('Failed to load sessions: ' + e.message, 'error');
+  }
+});
+
+// ---- Load Session ----
+document.getElementById('loadSessionBtn').addEventListener('click', async function() {
+  const sk = document.getElementById('sessionSelect').value;
+  currentSession = sessions.find(s => s.session_key == sk);
+  setStatus('Loading drivers...', 'loading');
+  this.disabled = true;
+
+  document.getElementById('driverSlots').style.display = 'none';
+  document.getElementById('lapTables').style.display = 'none';
+  document.getElementById('charts').style.display = 'none';
+  document.getElementById('compareBtnWrap').style.display = 'none';
+
+  try {
+    drivers = await fetchJSON(`${API}/drivers?session_key=${sk}`);
+    drivers.sort((a,b) => a.driver_number - b.driver_number);
+
+    const dOpts = drivers.map(d =>
+      `<option value="${d.driver_number}">${d.driver_number} — ${d.full_name || d.name_acronym}</option>`
+    ).join('');
+
+    document.getElementById('driverA').innerHTML = dOpts;
+    document.getElementById('driverB').innerHTML = dOpts;
+    // Default: pick different drivers
+    if (drivers.length > 1) document.getElementById('driverB').selectedIndex = 1;
+
+    document.getElementById('driverSlots').style.display = 'grid';
+    document.getElementById('compareBtnWrap').style.display = 'block';
+    document.getElementById('compareBtn').disabled = false;
+
+    laps = {};
+    setStatus(`Session loaded: ${currentSession.session_name} — ${drivers.length} drivers.`, 'ok');
+    this.disabled = false;
+
+    // Auto-load laps for both drivers
+    await loadLapsForBoth();
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'error');
+    this.disabled = false;
+  }
+});
+
+// ---- Load laps for driver ----
+async function loadLaps(driverNum, sk) {
+  if (laps[driverNum]) return laps[driverNum];
+  const data = await fetchJSON(`${API}/laps?session_key=${sk}&driver_number=${driverNum}`);
+  data.sort((a,b) => a.lap_number - b.lap_number);
+  laps[driverNum] = data;
+  return data;
+}
+
+async function loadLapsForBoth() {
+  const sk = document.getElementById('sessionSelect').value;
+  driverANum = document.getElementById('driverA').value;
+  driverBNum = document.getElementById('driverB').value;
+
+  setStatus('Loading lap data...', 'loading');
+
+  try {
+    const [lapsA, lapsB] = await Promise.all([
+      loadLaps(driverANum, sk),
+      loadLaps(driverBNum, sk)
+    ]);
+
+    renderLapTable('lapTableA', lapsA, 'A');
+    renderLapTable('lapTableB', lapsB, 'B');
+
+    document.getElementById('lapTables').style.display = 'grid';
+    setStatus('Click a lap row to select it for comparison.', 'ok');
+  } catch(e) {
+    setStatus('Error loading laps: ' + e.message, 'error');
+  }
+}
+
+function renderLapTable(tableId, lapsData, slot) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = '';
+
+  const times = lapsData.map(l => l.lap_duration).filter(Boolean);
+  const fastest = Math.min(...times);
+
+  lapsData.forEach(lap => {
+    if (!lap.lap_duration) return;
+    const isFastest = lap.lap_duration === fastest;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${lap.lap_number}</td>
+      <td class="${isFastest ? 'fastest' : ''}">${fmtTime(lap.lap_duration)}</td>
+      <td>${fmtTime(lap.duration_sector_1)}</td>
+      <td>${fmtTime(lap.duration_sector_2)}</td>
+      <td>${fmtTime(lap.duration_sector_3)}</td>
+    `;
+    tr.addEventListener('click', () => selectLap(lap, slot, tr, tableId));
+    tbody.appendChild(tr);
+  });
+}
+
+function selectLap(lap, slot, tr, tableId) {
+  // Clear previous selection in this table
+  document.querySelectorAll(`#${tableId} tbody tr`).forEach(r => {
+    r.classList.remove('selected', 'selected-b');
+  });
+  tr.classList.add(slot === 'A' ? 'selected' : 'selected-b');
+
+  if (slot === 'A') selectedLapA = lap;
+  else selectedLapB = lap;
+
+  // If both selected, enable compare
+  if (selectedLapA && selectedLapB) {
+    document.getElementById('compareBtn').disabled = false;
+  }
+}
+
+// ---- Driver change ----
+document.getElementById('driverA').addEventListener('change', async () => {
+  selectedLapA = null;
+  await loadLapsForBoth();
+});
+document.getElementById('driverB').addEventListener('change', async () => {
+  selectedLapB = null;
+  await loadLapsForBoth();
+});
+
+// ---- Compare ----
+document.getElementById('compareBtn').addEventListener('click', async () => {
+  if (!selectedLapA || !selectedLapB) {
+    setStatus('Please select a lap for each driver from the tables above.', 'error');
+    return;
+  }
+
+  const sk = document.getElementById('sessionSelect').value;
+  const dA = document.getElementById('driverA');
+  const dB = document.getElementById('driverB');
+  const nameA = dA.options[dA.selectedIndex].text;
+  const nameB = dB.options[dB.selectedIndex].text;
+
+  document.getElementById('legendA').textContent = `${nameA} — Lap ${selectedLapA.lap_number} (${fmtTime(selectedLapA.lap_duration)})`;
+  document.getElementById('legendB').textContent = `${nameB} — Lap ${selectedLapB.lap_number} (${fmtTime(selectedLapB.lap_duration)})`;
+
+  setStatus('Fetching telemetry data...', 'loading');
+
+  try {
+    const [telA, telB] = await Promise.all([
+      fetchTelemetry(sk, driverANum, selectedLapA),
+      fetchTelemetry(sk, driverBNum, selectedLapB)
+    ]);
+
+    renderCharts(telA, telB);
+    setStatus(`Comparing: ${nameA} Lap ${selectedLapA.lap_number} vs ${nameB} Lap ${selectedLapB.lap_number}`, 'ok');
+  } catch(e) {
+    setStatus('Error fetching telemetry: ' + e.message, 'error');
+  }
+});
+
+async function fetchTelemetry(sk, driverNum, lap) {
+  // Get car data between lap start and end times
+  if (!lap.date_start) throw new Error('No lap start time available for this lap');
+  const start = encodeURIComponent(lap.date_start);
+  // Estimate end: date_start + lap_duration seconds
+  const endDate = new Date(new Date(lap.date_start).getTime() + lap.lap_duration * 1000);
+  const end = encodeURIComponent(endDate.toISOString());
+
+  const data = await fetchJSON(
+    `${API}/car_data?session_key=${sk}&driver_number=${driverNum}&date>=${start}&date<=${end}`
+  );
+  return data;
+}
+
+function normalizeTelemetry(tel) {
+  if (!tel.length) return tel;
+  const t0 = new Date(tel[0].date).getTime();
+  return tel.map(d => ({
+    ...d,
+    t: (new Date(d.date).getTime() - t0) / 1000
+  }));
+}
+
+function renderCharts(telA, telB) {
+  const nA = normalizeTelemetry(telA);
+  const nB = normalizeTelemetry(telB);
+
+  document.getElementById('charts').style.display = 'block';
+
+  const colorA = '#e10600';
+  const colorB = '#00d2ff';
+
+  const chartDefs = [
+    { id: 'chartSpeed', key: 'speed', label: 'Speed (km/h)' },
+    { id: 'chartThrottle', key: 'throttle', label: 'Throttle (%)' },
+    { id: 'chartBrake', key: 'brake', label: 'Brake' },
+    { id: 'chartRpm', key: 'rpm', label: 'RPM' },
+    { id: 'chartGear', key: 'n_gear', label: 'Gear' },
+  ];
+
+  chartDefs.forEach(({ id, key }) => {
+    destroyChart(id);
+    const ctx = document.getElementById(id).getContext('2d');
+    charts[id] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'Driver A',
+            data: nA.map(d => ({ x: d.t, y: d[key] })),
+            borderColor: colorA,
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.2,
+          },
+          {
+            label: 'Driver B',
+            data: nB.map(d => ({ x: d.t, y: d[key] })),
+            borderColor: colorB,
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.2,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1a1a1a',
+            borderColor: '#333',
+            borderWidth: 1,
+            titleColor: '#999',
+            bodyColor: '#eee',
+            callbacks: {
+              title: items => `t = ${parseFloat(items[0].label).toFixed(2)}s`
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            title: { display: false },
+            grid: { color: '#1f1f1f' },
+            ticks: { color: '#555', font: { size: 10 }, maxTicksLimit: 12 }
+          },
+          y: {
+            grid: { color: '#1f1f1f' },
+            ticks: { color: '#555', font: { size: 10 } }
+          }
+        }
+      }
+    });
+  });
+}
+
+// ---- Init ----
+document.getElementById('yearSelect').dispatchEvent(new Event('change'));
+</script>
+
+</body>
+</html>
