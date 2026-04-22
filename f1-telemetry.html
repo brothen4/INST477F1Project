@@ -373,7 +373,7 @@ function destroyChart(id) {
   if (charts[id]) { charts[id].destroy(); delete charts[id]; }
 }
 
-// ---- Year change func allows user to select the year they want to compare.  ----
+//Year change func allows user to select the year they want to compare.
 document.getElementById('yearSelect').addEventListener('change', async function() {
   const year = this.value;
   const meetSel = document.getElementById('meetingSelect');
@@ -419,7 +419,7 @@ document.getElementById('meetingSelect').addEventListener('change', async functi
   }
 });
 
-// ---- Load Session Data----
+//Load Session Data
 document.getElementById('loadSessionBtn').addEventListener('click', async function() {
   const sk = document.getElementById('sessionSelect').value;
   currentSession = sessions.find(s => s.session_key == sk);
@@ -460,7 +460,7 @@ document.getElementById('loadSessionBtn').addEventListener('click', async functi
   }
 });
 
-// ---- Load laps for driver ----
+//Load laps for driver
 async function loadLaps(driverNum, sk) {
   if (laps[driverNum]) return laps[driverNum];
   const data = await fetchJSON(`${API}/laps?session_key=${sk}&driver_number=${driverNum}`);
@@ -516,7 +516,7 @@ function renderLapTable(tableId, lapsData, slot) {
 }
 
 function selectLap(lap, slot, tr, tableId) {
-  // Clear previous selection in this table
+  // Clear previous selection in this table 
   document.querySelectorAll(`#${tableId} tbody tr`).forEach(r => {
     r.classList.remove('selected', 'selected-b');
   });
@@ -525,13 +525,13 @@ function selectLap(lap, slot, tr, tableId) {
   if (slot === 'A') selectedLapA = lap;
   else selectedLapB = lap;
 
-  // If both selected, enable compare dont allow compare without both selected. 
+  // If both selected enable compare dont allow compare without both selected. 
   if (selectedLapA && selectedLapB) {
     document.getElementById('compareBtn').disabled = false;
   }
 }
 
-// ---- Driver change allows change to compare diff drivers. Auto sync to only drivers on the grid that year. ----
+//Driver change allows change to compare diff drivers. Auto updates to only show correct drivers for that year
 document.getElementById('driverA').addEventListener('change', async () => {
   selectedLapA = null;
   await loadLapsForBoth();
@@ -541,7 +541,7 @@ document.getElementById('driverB').addEventListener('change', async () => {
   await loadLapsForBoth();
 });
 
-// ---- Compare allows user to actually compare the two drivers. ----
+//Compare allows user to actually compare the two drivers.
 document.getElementById('compareBtn').addEventListener('click', async () => {
   if (!selectedLapA || !selectedLapB) {
     setStatus('Please select a lap for each driver from the tables above.', 'error');
@@ -573,7 +573,7 @@ document.getElementById('compareBtn').addEventListener('click', async () => {
 });
 
 async function fetchTelemetry(sk, driverNum, lap) {
-  // Get car data between lap start and end times
+  // Get car data between lap start and end times 
   if (!lap.date_start) throw new Error('No lap start time available for this lap');
   const start = encodeURIComponent(lap.date_start);
   // Estimate end: date_start + lap_duration seconds
